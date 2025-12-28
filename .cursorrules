@@ -1,0 +1,697 @@
+---
+description: "Next.js Admin Panel standards: Reusable components, TypeScript types, Tailwind CSS, and API client instances"
+alwaysApply: true
+---
+
+# Next.js Admin Panel Development Rules
+
+## Core Principles
+
+1. **Reusability First**: Every UI element must be a reusable component
+2. **Type Safety**: Everything must have proper TypeScript types - no `any` or untyped code
+3. **Component Architecture**: Child components receive data from parent via props
+4. **State Management**: Use Redux Toolkit for all state management - NO React Context API
+5. **Page Architecture**: All pages MUST be server components (no 'use client' on page.tsx)
+6. **Parent Component Pattern**: Each page calls a parent component, which contains child components
+7. **Module Layout**: Each module MUST have its own layout.tsx file
+8. **API Client Instances**: Use `api` for auto token from browser, `publicApi` for custom tokens
+9. **Styling**: Use Tailwind CSS exclusively for styling
+10. **Server/Client Awareness**: Handle browser-only APIs (localStorage) with proper checks
+
+## Component Architecture
+
+### Component Structure
+
+- **Never use built-in HTML elements directly** - Always create custom components
+- **Generic/Reusable Components**: Create generic components for common UI patterns
+- **Child Components**: All components should be child components that receive data via props
+- **No direct API calls in components**: Components receive data from parent or Redux store
+- **NO React Context API**: Use Redux Toolkit for all state management
+- **Page Structure**: page.tsx is server component → calls parent component → parent renders child components
+
+### Required Generic Components
+
+**CRITICAL**: Every UI element must be a reusable generic component. Never create one-off components or use built-in HTML elements directly.
+
+Create these reusable components in `src/components/generic/`:
+
+1. **Table Component** (`GenericTable.tsx`)
+   - Accepts: columns, data, loading state via props
+   - Handles: sorting, row selection
+   - **Note**: Does NOT handle pagination - use GenericPagination separately
+   - Type: Generic with TypeScript generics for type safety
+   - **Must be reusable** for all table displays across the app
+
+2. **Pagination Component** (`GenericPagination.tsx`)
+   - Accepts: currentPage, totalPages, totalItems, itemsPerPage, loading via props
+   - Handles: page navigation, items per page selection
+   - Emits: page-change, items-per-page-change events
+   - **Must be used everywhere pagination is needed** - never create custom pagination
+   - Works with PaginatedResponse type from API
+   - Fully reusable across all features (products, orders, users, etc.)
+
+3. **Card Component** (`GenericCard.tsx`)
+   - Accepts: title, content, actions, variant via props
+   - Reusable for all card displays across the entire application
+   - Never create feature-specific card components
+
+4. **Button Component** (`GenericButton.tsx`)
+   - Accepts: variant, size, loading, disabled, icon via props
+   - Handles all button styles and states
+   - **Must replace all `<button>` elements** in the application
+
+5. **Text Component** (`GenericText.tsx`)
+   - Accepts: variant, size, weight, color via props
+   - **Must replace all `<p>`, `<span>`, `<h1-h6>` elements**
+   - Single source of truth for all text styling
+
+6. **Input Component** (`GenericInput.tsx`)
+   - Accepts: type, label, placeholder, error, validation via props
+   - Handles all form inputs
+   - **Must replace all `<input>`, `<textarea>`, `<select>` elements**
+
+7. **Modal/Dialog Component** (`GenericModal.tsx`)
+   - Accepts: isOpen, title, content, actions via props
+   - Reusable for all modals across the application
+   - Never create custom modal implementations
+
+### Component Rules
+
+```typescript
+// ✅ CORRECT: Generic reusable component
+interface Props {
+  data: TableData[];
+  columns: Column[];
+  loading?: boolean;
+}
+
+export const GenericTable: React.FC<Props> = ({ data, columns, loading }) => {
+  // Component implementation
+};
+
+// ❌ WRONG: Using built-in elements directly
+<div>...</div> // Don't use raw HTML elements
+
+// ❌ WRONG: Component making API calls
+const response = await fetch('/api/data'); // Don't do this in components
+```
+
+## TypeScript Standards
+
+### Type Requirements
+
+- **No `any` types** - Everything must have explicit types
+- **API Response Types**: Every API response must have a defined interface/type
+- **Props Types**: All component props must be typed with interfaces
+- **State Types**: All React state must be typed
+- **Event Types**: All event handlers must have typed parameters
+
+### Type Examples
+
+```typescript
+// ✅ CORRECT: Properly typed API response
+interface ApiResponse<T> {
+  data: T;
+  message: string;
+  status: number;
+}
+
+interface UserResponse extends ApiResponse<User> {}
+
+// ✅ CORRECT: Typed component props
+interface ButtonProps {
+  variant: 'primary' | 'secondary' | 'danger';
+  size: 'sm' | 'md' | 'lg';
+  disabled?: boolean;
+  loading?: boolean;
+}
+
+// ❌ WRONG: Untyped or any
+const data: any = ...; // Never use any
+const response = await api.get('/users'); // Must type the response
+```
+
+## API Client Usage
+
+### API Client Instances
+
+**CRITICAL**: Use the correct API client instance based on your needs:
+
+1. **`api` (authenticatedClient)** - Auto token from browser localStorage
+   - Use for protected routes that require authentication
+   - Automatically adds accessToken from localStorage
+   - Handles token refresh automatically
+   - Redirects to login on 401 errors
+
+2. **`publicApi` (publicClient)** - No auto token, allows custom tokens
+   - Use for public routes, login, registration
+   - Does NOT automatically add token
+   - Can pass custom token via config: `{ headers: { Authorization: 'Bearer custom-token' } }`
+
+### API Usage Examples
+
+```typescript
+// ✅ CORRECT: Using api for authenticated requests (auto token)
+import { api } from '@/utils/api';
+
+const fetchUsers = async () => {
+  const response: PaginatedResponse<User> = await api.get('/users');
+  return response.data;
+};
+
+// ✅ CORRECT: Using publicApi for login (no auto token)
+import { publicApi } from '@/utils/api';
+
+const login = async (email: string, password: string) => {
+  const response: ApiResponse<LoginResponse> = await publicApi.post('/auth/login', {
+    email,
+    password,
+  });
+  return response.data;
+};
+
+// ✅ CORRECT: Using publicApi with custom token
+const customRequest = async (token: string) => {
+  const response = await publicApi.get('/some-endpoint', {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return response.data;
+};
+
+// ❌ WRONG: Using wrong client instance
+const response = await api.post('/auth/login'); // Should use publicApi
+const response = await publicApi.get('/protected/users'); // Should use api
+```
+
+## Browser/Server Awareness
+
+### localStorage Handling
+
+Since Next.js runs on both server and client, always check for browser environment:
+
+```typescript
+// ✅ CORRECT: Browser check before using localStorage
+const isBrowser = (): boolean => {
+  return typeof window !== 'undefined';
+};
+
+const getToken = (): string | null => {
+  if (!isBrowser()) return null;
+  return localStorage.getItem('accessToken');
+};
+
+// ❌ WRONG: Direct localStorage access
+const token = localStorage.getItem('accessToken'); // Will fail on server
+```
+
+## State Management with Redux Toolkit
+
+### Redux Toolkit Rules
+
+- **NO React Context API** - Use Redux Toolkit for all state management
+- **Store Structure**: One slice per feature/module
+- **Thunks**: Use createAsyncThunk for all API calls
+- **Selectors**: Use typed selectors for accessing state
+
+```typescript
+// ✅ CORRECT: Redux Toolkit slice
+// src/store/slices/authSlice.ts
+import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
+import { authApi } from '@/utils/api/auth.api';
+import type { LoginRequest, User } from '@/types/auth.types';
+
+export const login = createAsyncThunk(
+  'auth/login',
+  async (credentials: LoginRequest) => {
+    const response = await authApi.login(credentials);
+    return response;
+  }
+);
+
+const authSlice = createSlice({
+  name: 'auth',
+  initialState: {
+    user: null as User | null,
+    accessToken: null as string | null,
+    loading: false,
+    error: null as string | null,
+  },
+  reducers: {
+    logout: (state) => {
+      state.user = null;
+      state.accessToken = null;
+    },
+  },
+  extraReducers: (builder) => {
+    builder
+      .addCase(login.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(login.fulfilled, (state, action) => {
+        state.loading = false;
+        state.accessToken = action.payload.accessToken;
+      })
+      .addCase(login.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.error.message || 'Login failed';
+      });
+  },
+});
+
+export const { logout } = authSlice.actions;
+export default authSlice.reducer;
+```
+
+## Data Flow Pattern
+
+### Component Data Flow
+
+```
+Server Page (page.tsx)
+  ↓ (renders)
+Parent Component (Client - uses Redux)
+  ↓ (dispatches actions, uses selectors)
+Redux Store
+  ↓ (API calls via thunks)
+API Client
+  ↓ (makes HTTP request)
+Backend API
+  ↓ (updates state)
+Redux Store
+  ↓ (passes data via props)
+Child Components (GenericTable, GenericCard, etc.)
+```
+
+### Example Pattern
+
+```tsx
+// ParentComponent.tsx
+'use client';
+
+import { useState, useEffect } from 'react';
+import { api } from '@/utils/api';
+import { GenericTable } from '@/components/generic/GenericTable';
+import { GenericPagination } from '@/components/generic/GenericPagination';
+import type { PaginatedResponse, User } from '@/types';
+
+export const UsersPage: React.FC = () => {
+  const [users, setUsers] = useState<User[]>([]);
+  const [pagination, setPagination] = useState<PaginationMeta | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const fetchUsers = async (page: number = 1) => {
+    setLoading(true);
+    const response: PaginatedResponse<User> = await api.get(`/users?page=${page}`);
+    setUsers(response.data);
+    setPagination(response.pagination);
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    fetchUsers(1);
+  }, []);
+
+  const handlePageChange = (page: number) => {
+    fetchUsers(page);
+  };
+
+  return (
+    <div>
+      <GenericTable
+        data={users}
+        columns={tableColumns}
+        loading={loading}
+      />
+      {pagination && (
+        <GenericPagination
+          currentPage={pagination.page}
+          totalPages={pagination.totalPages}
+          totalItems={pagination.total}
+          itemsPerPage={pagination.limit}
+          loading={loading}
+          onPageChange={handlePageChange}
+        />
+      )}
+    </div>
+  );
+};
+```
+
+## Tailwind CSS Usage
+
+### Styling Rules
+
+- **Use Tailwind classes exclusively** - No inline styles or CSS files
+- **Create reusable utility classes** if needed (via Tailwind config)
+- **Component variants** should use Tailwind classes via computed props
+
+```tsx
+// ✅ CORRECT: Using Tailwind
+<button className={`
+  px-4 py-2 rounded
+  ${variant === 'primary' ? 'bg-blue-500 text-white' : 'bg-gray-200'}
+  ${disabled && 'opacity-50 cursor-not-allowed'}
+`}>
+
+// ❌ WRONG: Inline styles or CSS files
+<button style={{ padding: '10px', background: 'blue' }}>
+```
+
+## File Organization
+
+### Component Structure
+
+```
+src/
+  ├── components/
+  │   ├── generic/          # Reusable generic components
+  │   │   ├── GenericTable.tsx
+  │   │   ├── GenericCard.tsx
+  │   │   ├── GenericButton.tsx
+  │   │   ├── GenericText.tsx
+  │   │   └── GenericInput.tsx
+  │   └── [module]/          # Module-specific components
+  │       ├── [Module]PageComponent.tsx  # Parent component
+  │       └── [Module]Form.tsx           # Child component
+  ├── store/
+  │   ├── index.ts          # Store configuration
+  │   └── slices/           # Redux slices
+  │       ├── authSlice.ts
+  │       └── [module]Slice.ts
+  ├── app/                  # Next.js app directory
+  │   ├── layout.tsx        # Root layout
+  │   ├── [module]/
+  │   │   ├── layout.tsx    # Module layout (REQUIRED)
+  │   │   └── page.tsx      # Module page (server component)
+  │   └── ...
+  ├── types/                # TypeScript type definitions
+  │   ├── api.types.ts      # API response types
+  │   ├── component.types.ts # Component prop types
+  │   └── entity.types.ts   # Entity types
+  └── utils/
+      ├── api/              # API client instances
+      │   ├── client.ts     # api and publicApi instances
+      │   └── index.ts
+      └── jwt.ts            # JWT utilities
+```
+
+## API Integration
+
+### API Type Requirements
+
+```typescript
+// types/api.types.ts
+export interface ApiResponse<T> {
+  data: T;
+  message: string;
+  status: number;
+  errors?: string[];
+}
+
+// Pagination metadata - used by GenericPagination component
+export interface PaginationMeta {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}
+
+// Paginated response - MUST be used for all paginated API endpoints
+export interface PaginatedResponse<T> extends ApiResponse<T[]> {
+  pagination: PaginationMeta;
+}
+
+// All API calls must return typed responses
+async function fetchUsers(page: number = 1): Promise<PaginatedResponse<User>> {
+  const response = await api.get(`/users?page=${page}`);
+  return response as PaginatedResponse<User>;
+}
+```
+
+### Pagination Integration Pattern
+
+**CRITICAL**: All paginated data must use `PaginatedResponse<T>` type and `GenericPagination` component.
+
+```typescript
+// ✅ CORRECT: Using PaginatedResponse and GenericPagination
+const [users, setUsers] = useState<User[]>([]);
+const [pagination, setPagination] = useState<PaginationMeta | null>(null);
+
+const fetchUsers = async (page: number) => {
+  const response: PaginatedResponse<User> = await api.get(`/users?page=${page}`);
+  setUsers(response.data);
+  setPagination(response.pagination);
+};
+
+// In component
+<GenericPagination
+  currentPage={pagination?.page || 1}
+  totalPages={pagination?.totalPages || 0}
+  totalItems={pagination?.total || 0}
+  itemsPerPage={pagination?.limit || 10}
+  loading={loading}
+  onPageChange={fetchUsers}
+/>
+
+// ❌ WRONG: Custom pagination or untyped response
+<div className="pagination">...</div> // Never create custom pagination
+const response = await api.get('/users'); // Must use PaginatedResponse type
+```
+
+## Component Communication
+
+### Props and Events
+
+```typescript
+// ✅ CORRECT: Typed props and event handlers
+interface Props {
+  items: Item[];
+  selectedId?: string;
+  onSelect?: (id: string) => void;
+  onUpdate?: (item: Item) => void;
+}
+
+export const GenericComponent: React.FC<Props> = ({
+  items,
+  selectedId,
+  onSelect,
+  onUpdate,
+}) => {
+  // Component implementation
+};
+```
+
+## Reusability Requirements
+
+### Core Principle: Everything Must Be Reusable
+
+**Before creating any component, ask:**
+1. Can this be made generic and reusable?
+2. Will other features need similar functionality?
+3. Can I use an existing generic component instead?
+
+**Rules:**
+- ✅ **DO**: Create generic components that work across all features
+- ✅ **DO**: Use existing generic components (GenericTable, GenericPagination, GenericCard, etc.)
+- ❌ **DON'T**: Create feature-specific components when a generic one can work
+- ❌ **DON'T**: Duplicate pagination, table, or card logic
+- ❌ **DON'T**: Use built-in HTML elements directly
+
+### Generic Component Usage Examples
+
+```typescript
+// ✅ CORRECT: Using GenericPagination everywhere
+// Products page
+<GenericPagination currentPage={productPagination.page} ... />
+
+// Orders page  
+<GenericPagination currentPage={orderPagination.page} ... />
+
+// Users page
+<GenericPagination currentPage={userPagination.page} ... />
+
+// ❌ WRONG: Creating custom pagination for each feature
+<div className="product-pagination">...</div> // Don't do this
+<div className="order-pagination">...</div>   // Don't do this
+```
+
+## Next.js Specific Rules
+
+### Page Architecture (CRITICAL)
+
+**ALL pages MUST follow this structure:**
+
+1. **page.tsx** - Server component (NO 'use client')
+   - Imports and renders the parent component
+   - Can pass initial data from server
+
+2. **Parent Component** - Client component ('use client')
+   - Contains business logic
+   - Uses Redux Toolkit for state management
+   - Handles API calls via Redux thunks
+   - Passes data to child components via props
+
+3. **Child Components** - Client components ('use client')
+   - Receive data from parent via props
+   - No direct API calls
+   - No Redux access (data comes from parent)
+
+```tsx
+// ✅ CORRECT: Server page component
+// app/login/page.tsx
+import { LoginPageComponent } from '@/components/login/LoginPageComponent';
+
+export default function LoginPage() {
+  return <LoginPageComponent />;
+}
+
+// ✅ CORRECT: Parent component (client)
+// src/components/login/LoginPageComponent.tsx
+'use client';
+
+import { useDispatch, useSelector } from 'react-redux';
+import { login } from '@/store/slices/authSlice';
+import { LoginForm } from './LoginForm'; // Child component
+
+export const LoginPageComponent: React.FC = () => {
+  const dispatch = useDispatch();
+  const { loading, error } = useSelector((state: RootState) => state.auth);
+
+  const handleLogin = async (credentials: LoginRequest) => {
+    await dispatch(login(credentials));
+  };
+
+  return <LoginForm onSubmit={handleLogin} loading={loading} error={error} />;
+};
+
+// ✅ CORRECT: Child component (client)
+// src/components/login/LoginForm.tsx
+'use client';
+
+interface Props {
+  onSubmit: (credentials: LoginRequest) => void;
+  loading: boolean;
+  error: string | null;
+}
+
+export const LoginForm: React.FC<Props> = ({ onSubmit, loading, error }) => {
+  // Form implementation - receives data from parent
+};
+```
+
+### Module Layout Pattern
+
+**Each module MUST have its own layout.tsx:**
+
+```
+app/
+  ├── login/
+  │   ├── layout.tsx          # Module layout (server component)
+  │   └── page.tsx            # Module page (server component)
+  ├── dashboard/
+  │   ├── layout.tsx          # Module layout (server component)
+  │   └── page.tsx            # Module page (server component)
+```
+
+```tsx
+// ✅ CORRECT: Module layout
+// app/login/layout.tsx
+export default function LoginLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="login-module">
+      {children}
+    </div>
+  );
+}
+```
+
+### Client Components
+
+- Use `'use client'` directive for components that use browser APIs or interactivity
+- Server components by default (no directive needed)
+- Client components for: useState, useEffect, event handlers, localStorage access, Redux hooks
+
+```tsx
+// ✅ CORRECT: Client component with 'use client'
+'use client';
+
+import { useDispatch } from 'react-redux';
+
+export const InteractiveComponent: React.FC = () => {
+  const dispatch = useDispatch();
+  // Component implementation
+};
+
+// ✅ CORRECT: Server component (default, no directive)
+export default async function ServerPage() {
+  // Server-side data fetching
+  return <div>Server Component</div>;
+};
+```
+
+## Checklist for New Components
+
+- [ ] Component is generic and reusable across multiple features
+- [ ] Checked if existing generic component can be used instead
+- [ ] All props are typed with interfaces
+- [ ] All event handlers are typed
+- [ ] Uses Tailwind CSS for styling
+- [ ] Receives data from parent or state management
+- [ ] No direct API calls in component
+- [ ] No `any` types used
+- [ ] Follows naming convention (GenericXxx.tsx for reusable components)
+- [ ] If pagination is needed, uses GenericPagination component
+- [ ] If table is needed, uses GenericTable component
+- [ ] If card is needed, uses GenericCard component
+- [ ] Uses `'use client'` directive if browser APIs are needed
+
+## Checklist for API Calls
+
+- [ ] Using correct API instance (`api` for auto token, `publicApi` for custom/no token)
+- [ ] API response is properly typed
+- [ ] Using `PaginatedResponse<T>` for paginated endpoints
+- [ ] Storing pagination metadata in state
+- [ ] Handling errors appropriately
+- [ ] Browser checks for localStorage access
+
+## Examples
+
+### Generic Table Component
+
+```tsx
+// GenericTable.tsx
+interface Column<T> {
+  key: keyof T;
+  label: string;
+  sortable?: boolean;
+}
+
+interface Props<T> {
+  data: T[];
+  columns: Column<T>[];
+  loading?: boolean;
+}
+
+export const GenericTable = <T,>({ data, columns, loading }: Props<T>) => {
+  // Component implementation
+};
+```
+
+### Typed API Usage
+
+```typescript
+// In component or hook
+const fetchUsers = async (page: number = 1): Promise<void> => {
+  setLoading(true);
+  const response: PaginatedResponse<User> = await api.get(`/users?page=${page}`);
+  setUsers(response.data);
+  setPagination(response.pagination);
+  setLoading(false);
+};
+```
+

@@ -1,0 +1,5 @@
+export type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'success' | 'warning'
+export type ButtonSize = 'sm' | 'md' | 'lg'
+export type TextVariant = 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6' | 'p' | 'span'
+export type TextSize = 'xs' | 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '3xl'
+export type CardVariant = 'default' | 'outlined' | 'elevated'
