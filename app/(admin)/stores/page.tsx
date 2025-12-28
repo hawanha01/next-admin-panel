@@ -1,0 +1,8 @@
+export default function StoresPage() {
+  return (
+    <div>
+      <h1>Stores</h1>
+      {/* Stores content will be added here */}
+    </div>
+  )
+}
