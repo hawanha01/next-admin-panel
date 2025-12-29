@@ -102,6 +102,13 @@ export const SidebarNav: React.FC<Props> = ({ collapsed, onClose }) => {
         route: '/orders',
         active: currentPath === '/orders' || currentPath.startsWith('/orders/'),
       },
+      {
+        id: 'templates',
+        label: 'Templates',
+        icon: '📧',
+        route: '/templates',
+        active: currentPath === '/templates' || currentPath.startsWith('/templates/'),
+      },
     ]
   }
 

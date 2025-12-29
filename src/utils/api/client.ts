@@ -9,6 +9,7 @@ import type { LoginResponse } from '@/types/auth.types'
 import {
   getAccessToken,
   getRefreshToken,
+  getUserRole,
   setAccessToken,
   setRefreshToken,
   clearAuthCookies,
@@ -121,6 +122,12 @@ authenticatedClient.interceptors.request.use(
     // Add the (possibly refreshed) token to the request
     if (accessToken) {
       config.headers.Authorization = `Bearer ${accessToken}`
+    }
+
+    // Add x-role header from cookies if available
+    const userRole = getUserRole()
+    if (userRole) {
+      config.headers['x-role'] = userRole
     }
 
     return config
