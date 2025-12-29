@@ -101,6 +101,13 @@ export const getRefreshToken = (): string | null => {
 }
 
 /**
+ * Get user role from cookie
+ */
+export const getUserRole = (): string | null => {
+  return getCookie('userRole')
+}
+
+/**
  * Set access token cookie
  */
 export const setAccessToken = (token: string, maxAge: number = 60 * 15): void => {
